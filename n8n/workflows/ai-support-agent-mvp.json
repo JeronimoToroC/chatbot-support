@@ -1,0 +1,807 @@
+{
+  "name": "AI Support Agent - MVP",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-576, 176],
+      "id": "dcbdb4f7-33cb-4e25-b8b9-d0016714ad44",
+      "name": "Webhook",
+      "webhookId": "37726996-5a7e-4951-8f8d-c947bc1f3fca"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.choices[0].message.tool_calls }}",
+                    "rightValue": "create_support_ticket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "c61a7ffb-b797-41d4-bb05-27c0096e4e14"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c3ee3728-1a0d-425f-9b63-42b2073f557f",
+                    "leftValue": "={{ $json.choices[0].message.tool_calls[0].function.name }}",
+                    "rightValue": "get_ticket_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1c2fbaec-3c90-4f9d-a6bf-e2a8c700dece",
+                    "leftValue": "={{ $json.choices[0].message.tool_calls }}",
+                    "rightValue": "Otherwise",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "notExists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [416, 160],
+      "id": "2d83c6a4-76ad-4af4-994a-1cddb192353e",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1936, 208],
+      "id": "a028fec5-1772-45f8-8c56-07c38c52c45e",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un agente de soporte técnico. Usa las funciones disponibles correctamente:\\n\\n- get_ticket_status: Cuando el usuario menciona un ID/UUID de ticket existente (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) y quiere consultar su estado. Ejemplos: \\\"consulta el ticket abc-123\\\", \\\"¿cómo va mi ticket xyz?\\\", \\\"estado del ticket 12345\\\".\\n\\n- create_support_ticket: Cuando el usuario reporta un NUEVO problema que necesita atención. Ejemplos: \\\"no puedo acceder\\\", \\\"tengo un error\\\", \\\"necesito ayuda con...\\\".\\n\\nSi el mensaje no está relacionado con tickets, responde directamente de forma amable. SIEMPRE usa el UUID EXACTO que el usuario proporciona, no inventes IDs.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.body.message }}\"\n    }\n  ],\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"function\": {\n        \"name\": \"create_support_ticket\",\n        \"description\": \"Crea un ticket cuando el usuario reporta un problema\",\n        \"parameters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"description\": {\n              \"type\": \"string\",\n              \"description\": \"Descripción del problema\"\n            },\n            \"priority\": {\n              \"type\": \"string\",\n              \"enum\": [\"low\", \"medium\", \"high\"]\n            }\n          },\n          \"required\": [\"description\"]\n        }\n      }\n    },\n    {\n      \"type\": \"function\",\n      \"function\": {\n        \"name\": \"get_ticket_status\",\n        \"description\": \"Consulta el estado de un ticket existente. USA ESTA FUNCIÓN cuando el usuario: mencione un ID/UUID de ticket, pregunte por el estado de un ticket, use palabras como 'consulta', 'estado', 'cómo va', 'revisar ticket'. El ticket_id puede ser cualquier formato: UUID completo, números, o texto.\",\n        \"parameters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"ticket_id\": {\n              \"type\": \"string\",\n              \"description\": \"ID del ticket a consultar. Extrae EXACTAMENTE el identificador que el usuario menciona, sin modificarlo. Puede ser UUID, número o cualquier string que el usuario proporcione.\"\n            }\n          },\n          \"required\": [\"ticket_id\"]\n        }\n      }\n    }\n  ],\n  \"tool_choice\": \"auto\",\n  \"temperature\": 0.2\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [-160, 176],
+      "id": "8e80462d-56cb-41f1-8735-2d6429f40e0a",
+      "name": "Groq Function Call",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "notesInFlow": false,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "QEnMeTyPOhkrc50p",
+          "name": "Groq"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "af47a7ba-658c-4c85-99a6-960e83a9e6e7",
+              "leftValue": "={{ $json.choices }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {
+          "ignoreCase": true
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [48, 176],
+      "id": "86a9b909-6822-4678-b277-7089dc585355",
+      "name": "Check Groq Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "515b57bf-aabc-4524-9770-28ff6f1ee829",
+              "name": "response_type",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "445ca665-a796-41c0-9c4d-7f6227b762f1",
+              "name": "message",
+              "value": "Lo siento, estoy experimentando dificultades técnicas. Por favor intenta nuevamente en unos momentos.",
+              "type": "string"
+            },
+            {
+              "id": "8449a9f4-addd-4496-865a-dc200a7901a1",
+              "name": "error_code",
+              "value": "GROQ_SERVICE_ERROR",
+              "type": "string"
+            },
+            {
+              "id": "ef2a1505-c093-4c45-8178-cbe296d6b2d3",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1408, 592],
+      "id": "05761d8c-cee1-4737-8346-711275b9a517",
+      "name": "Groq Error Fallback"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/v1/tickets",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"user_id\": \"{{ $json.user_id }}\",\n  \"description\": \"{{ $json.description }}\",\n  \"priority\": \"{{ $json.priority }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [816, -16],
+      "id": "d7c4d3a8-1f4e-49d1-b955-580fbaeedc73",
+      "name": "Create Ticket Backend",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "maxTries": 2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8000/api/v1/tickets/{{ $json.ticket_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [816, 176],
+      "id": "1bfde0d3-9201-4b43-8e00-f58103d6c532",
+      "name": "Get Ticket Backend",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c8555e2-3785-4287-87c3-7c43383f2851",
+              "leftValue": "={{ $json.ticket_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1008, -16],
+      "id": "127f77a3-3eaa-49b5-9e2f-ce75370322b2",
+      "name": "Check Create Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d63a89ee-d0d5-43aa-beaf-a449349e2fb0",
+              "name": "response_type",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "b229982c-30dd-4700-b07f-9cafc24b2c0d",
+              "name": "message",
+              "value": "No pude crear el ticket en este momento. El sistema de soporte está experimentando problemas. Por favor intenta más tarde.",
+              "type": "string"
+            },
+            {
+              "id": "2097b9e3-ba5e-4551-8080-82b45d0e7cfa",
+              "name": "error_code",
+              "value": "BACKEND_CREATE_ERROR",
+              "type": "string"
+            },
+            {
+              "id": "b7ccbe07-ac1f-4546-a0a7-9e1171f6786a",
+              "name": "retry_suggested",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1408, 64],
+      "id": "5031e04d-7227-4341-a611-3a034e9d3a28",
+      "name": "Backend Create Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1233525f-2395-4e85-b924-1a4117503487",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [992, 176],
+      "id": "6664141d-7a8b-4998-86ea-71eadd44ffa4",
+      "name": "Check Get Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3d6297c7-3c8d-4b10-ba25-f0fcfe8d42e2",
+              "name": "response_type",
+              "value": "error",
+              "type": "string"
+            },
+            {
+              "id": "6fc00b9b-3cc7-4f0f-b30f-0b8c4dff25c1",
+              "name": "message",
+              "value": "No encontré ningún ticket con ese ID. ¿Puedes verificar el número de ticket que me proporcionaste?",
+              "type": "string"
+            },
+            {
+              "id": "bb5fd63a-b8ac-404d-b155-41a9f5dfdc02",
+              "name": "error_code",
+              "value": "TICKET_NOT_FOUND",
+              "type": "string"
+            },
+            {
+              "id": "012fcf32-e734-407c-8bd5-84269937f837",
+              "name": "help_text",
+              "value": "Asegúrate de proporcionar el ID completo del ticket que recibiste al crearlo.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1408, 416],
+      "id": "07d7ec48-ac4f-4d76-b603-f17ae2f60292",
+      "name": "Backend Get Error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const toolCall = $input.item.json.choices[0].message.tool_calls[0];\nconst args = JSON.parse(toolCall.function.arguments);\nconst webhook = $('Webhook').item.json;\n\nreturn [{\n  json: {\n    user_id: webhook.body.user_id,\n    description: args.description,\n    priority: args.priority || 'medium'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [608, -16],
+      "id": "eabc4a1f-ae4d-4a8c-a92b-b4d4ca8016b6",
+      "name": "Parse Create Ticket Args"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2d0291e-831e-4528-a083-6679f2c764bc",
+              "name": "response_message",
+              "value": "={{ $json.message }} con ID {{ $json.ticket_id }}. Estado: {{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "599c9a0d-2172-435c-99a6-0a445140bb69",
+              "name": "ticket_id",
+              "value": "={{ $json.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "d1704652-4127-4656-a13d-32128527c2ed",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1408, -112],
+      "id": "a1f3a126-ef8f-4b06-a4f8-1cbf25222c2e",
+      "name": "Format Create Success"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dcc71cb7-44cc-40dd-b24b-2bc19957f02b",
+              "name": "response_message",
+              "value": "=Ticket {{ $json.id }}: {{ $json.status }}. Descripción: {{ $json.description }}",
+              "type": "string"
+            },
+            {
+              "id": "15526174-8578-4e31-9bad-5a352aa2e930",
+              "name": "ticket_data",
+              "value": "={{ $json }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1408, 256],
+      "id": "b1f35d80-fe13-4c44-9d6e-ff1a9a73429e",
+      "name": "Format Get Success"
+    },
+    {
+      "parameters": {
+        "jsCode": "const toolCall = $input.item.json.choices[0].message.tool_calls[0];\nconst args = JSON.parse(toolCall.function.arguments);\n\nreturn [{\n  json: {\n    ticket_id: args.ticket_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [608, 176],
+      "id": "a0f29b49-339c-49fd-84b9-70ac9dfb72fc",
+      "name": "Parse Get Ticket Args"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear el body si viene como string\nconst timestamp = new Date().toISOString();\nlet input = $input.item.json;\n\n// Si body es string, parsearlo\nif (typeof input.body === 'string') {\n  input.body = JSON.parse(input.body);\n}\n\nconsole.log('=== WEBHOOK INPUT ===');\nconsole.log('Timestamp:', timestamp);\nconsole.log('User ID:', input.body.user_id);\nconsole.log('Message:', input.body.message);\nconsole.log('Raw Body:', JSON.stringify(input.body, null, 2));\nconsole.log('====================');\n\n// Pasar los datos parseados\nreturn [{ json: input }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-368, 176],
+      "id": "3ffb1851-aed2-4a69-a82d-d203b559f3c7",
+      "name": "Log Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de la decisión del LLM\nconst timestamp = new Date().toISOString();\nconst groqResponse = $input.item.json;\n\nconsole.log('=== GROQ DECISION ===');\nconsole.log('Timestamp:', timestamp);\n\nif (groqResponse.choices && groqResponse.choices[0].message.tool_calls) {\n  const toolCall = groqResponse.choices[0].message.tool_calls[0];\n  console.log('Function Called:', toolCall.function.name);\n  console.log('Arguments:', toolCall.function.arguments);\n} else {\n  console.log('No function call - Direct response');\n  console.log('Message:', groqResponse.choices[0].message.content);\n}\n\nconsole.log('Model:', groqResponse.model);\nconsole.log('====================');\n\n// Pasar los datos sin modificar\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 160],
+      "id": "f1bbf558-cd26-4357-badb-1aa46a1cef5e",
+      "name": "Log Groq Decision"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log del resultado de crear ticket\nconst timestamp = new Date().toISOString();\nconst result = $input.item.json;\n\nconsole.log('=== CREATE TICKET RESULT ===');\nconsole.log('Timestamp:', timestamp);\nconsole.log('Success: true');\nconsole.log('Ticket ID:', result.ticket_id);\nconsole.log('Status:', result.status);\nconsole.log('Message:', result.message);\nconsole.log('============================');\n\n// Pasar los datos sin modificar\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1216, -112],
+      "id": "fd83d896-4714-4ac5-9089-584e9c6bd0bd",
+      "name": "Log Create Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log del resultado de consultar ticket\nconst timestamp = new Date().toISOString();\nconst result = $input.item.json;\n\nconsole.log('=== GET TICKET RESULT ===');\nconsole.log('Timestamp:', timestamp);\nconsole.log('Success: true');\nconsole.log('Ticket ID:', result.id);\nconsole.log('User ID:', result.user_id);\nconsole.log('Status:', result.status);\nconsole.log('Priority:', result.priority);\nconsole.log('Description:', result.description);\nconsole.log('=========================');\n\n// Pasar los datos sin modificar\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 176],
+      "id": "896e79ae-9504-4a4d-b67d-ed385354df1f",
+      "name": "Log Get Result"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log de la respuesta final al usuario\nconst timestamp = new Date().toISOString();\nconst response = $input.item.json;\n\nconsole.log('=== FINAL RESPONSE ===');\nconsole.log('Timestamp:', timestamp);\nconsole.log('Response Type:', response.response_type || 'success');\n\nif (response.error_code) {\n  console.log('Error Code:', response.error_code);\n  console.log('Error Message:', response.message);\n} else {\n  console.log('Success Message:', response.response_message || response.message);\n}\n\nconsole.log('Full Response:', JSON.stringify(response, null, 2));\nconsole.log('======================');\n\n// Pasar los datos sin modificar\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1744, 208],
+      "id": "7b98a8b8-0589-473f-9a16-311149bc6290",
+      "name": "Log Final Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Manejo de mensajes fuera de scope o sin function call\nconst timestamp = new Date().toISOString();\nconst groqResponse = $input.item.json;\n\n// Intentar extraer respuesta directa de Groq si existe\nlet groqMessage = '';\nif (groqResponse.choices && groqResponse.choices[0].message.content) {\n  groqMessage = groqResponse.choices[0].message.content;\n}\n\nconsole.log('=== OUT OF SCOPE MESSAGE ===');\nconsole.log('Timestamp:', timestamp);\nconsole.log('Groq Direct Response:', groqMessage);\nconsole.log('============================');\n\n// Respuesta genérica amigable\nreturn [{\n  json: {\n    response_type: \"info\",\n    message: groqMessage || \"Puedo ayudarte a crear tickets de soporte o consultar el estado de tickets existentes. ¿En qué puedo asistirte?\",\n    available_actions: [\n      \"Crear un ticket de soporte\",\n      \"Consultar el estado de un ticket\"\n    ],\n    timestamp: timestamp\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [944, 368],
+      "id": "b62c681c-2ab8-4025-904c-92f33f5eeeb6",
+      "name": "Out of Scope Handler"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Log Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Parse Create Ticket Args",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Get Ticket Args",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Out of Scope Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Function Call": {
+      "main": [
+        [
+          {
+            "node": "Check Groq Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Groq Success": {
+      "main": [
+        [
+          {
+            "node": "Log Groq Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq Error Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Error Fallback": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Ticket Backend": {
+      "main": [
+        [
+          {
+            "node": "Check Create Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Ticket Backend": {
+      "main": [
+        [
+          {
+            "node": "Check Get Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Create Success": {
+      "main": [
+        [
+          {
+            "node": "Log Create Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Backend Create Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backend Create Error": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Get Success": {
+      "main": [
+        [
+          {
+            "node": "Log Get Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Backend Get Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Backend Get Error": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Create Ticket Args": {
+      "main": [
+        [
+          {
+            "node": "Create Ticket Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Create Success": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Get Success": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Get Ticket Args": {
+      "main": [
+        [
+          {
+            "node": "Get Ticket Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Input": {
+      "main": [
+        [
+          {
+            "node": "Groq Function Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Groq Decision": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Create Result": {
+      "main": [
+        [
+          {
+            "node": "Format Create Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Get Result": {
+      "main": [
+        [
+          {
+            "node": "Format Get Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Final Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Out of Scope Handler": {
+      "main": [
+        [
+          {
+            "node": "Log Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "30d31a3e-41c4-4320-b838-0a5d971d6fd4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "40302c799180814b227c26df410225bd182f3cc32d1022f782f97ff732016fbe"
+  },
+  "id": "QRlYUMybe3haTEQvZes7t",
+  "tags": []
+}
